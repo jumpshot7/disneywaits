@@ -31,11 +31,3 @@ The project is split into three main components:
 Wait time data is sourced from [Queue-Times.com](https://queue-times.com), a public API that publishes official Disney park wait times updated every 5 minutes, with a historical database spanning back to 2014.
  
 > Powered by [Queue-Times.com](https://queue-times.com)
- 
-## Key Findings
- 
-*To be updated as analysis is completed.*
- 
-## License
- 
-MIT
