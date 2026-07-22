@@ -1,33 +1,85 @@
-# DisneyWaits — Disney World Wait Time Trend Analyzer
- 
-This project is a full-stack data engineering application that answers one question: **"Are Disney World wait times actually getting worse year over year, or is it just a feeling?"**
- 
-Using 10+ years of historical wait time data from Magic Kingdom attractions, DisneyWaits ingests, stores, and analyzes ride wait times to surface crowd trends, seasonal patterns, and year-over-year comparisons across Disney World's most popular rides.
- 
+# DisneyWaits — Magic Kingdom Wait Time Tracker
+
+DisneyWaits is a full-stack data project built around one question: **"Are Magic Kingdom wait times getting worse over time?"**
+
+It ingests live wait-time snapshots from the [Queue-Times.com](https://queue-times.com) public API, stores them in PostgreSQL, and surfaces them through a Spring Boot REST API and a Next.js dashboard.
+
+## A note on the data (and why the project is built this way)
+
+The official Queue-Times.com API only exposes **live** wait times — a snapshot of the current moment, with no historical endpoint. Rather than fabricate a historical dataset, DisneyWaits treats history as something to **accumulate**: the pipeline captures live snapshots over time, building a growing dataset that powers year-over-year analysis as it matures. The backend's trend query is in place today and becomes more meaningful the longer the pipeline runs.
+
 ## Architecture & Tech Stack
- 
-The project is split into three main components:
- 
-- **Data Pipeline (`pipeline/`)**:
-    - Fetches live and historical wait time data from the Queue-Times.com public API.
-    - Normalizes and validates ride data before bulk upserting into PostgreSQL with duplicate prevention via unique constraints.
-    - Runs on a schedule to continuously ingest new snapshots, building a growing historical dataset over time.
-- **Backend API (`backend/`)**:
-    - A Spring Boot (Java 21) REST API built with Spring Data JPA, exposing endpoints for year-over-year trend analysis, ride-level breakdowns, and seasonal averages.
-    - Uses JPQL aggregate queries to compute historical wait time statistics directly from PostgreSQL.
-- **Frontend (`frontend/`)**:
-    - A Next.js + TypeScript dashboard with interactive Recharts visualizations.
-    - Displays crowd trend charts, ride-level wait time history, and seasonal patterns across Magic Kingdom attractions.
+
+- **Data Pipeline (`pipeline/`)** — Python (`httpx`, `psycopg2`).
+    - Fetches the current wait time for every Magic Kingdom ride and inserts a timestamped snapshot into PostgreSQL.
+    - Designed to be run repeatedly (e.g. via cron or a scheduler) to build history over time.
+- **Backend API (`backend/`)** — Spring Boot 3.5 (Java 25, Spring Data JPA).
+    - REST endpoints for all wait times, per-park and per-ride lookups, and a JPQL year-over-year average query.
+- **Frontend (`frontend/`)** — Next.js + TypeScript dashboard with Recharts.
+    - Live stat cards, a top-10 longest-waits bar chart, and a full ride list.
+
 ## Repository Structure
- 
+
 ```text
 .
-├── backend/       # Spring Boot REST API (Java 21, Spring Data JPA, PostgreSQL)
+├── backend/       # Spring Boot REST API (Java 25, Spring Data JPA, PostgreSQL)
 ├── frontend/      # Next.js + TypeScript dashboard with Recharts visualizations
-├── pipeline/      # Python data ingestion pipeline (httpx, pandas, psycopg2)
-└── docker-compose.yml  # Orchestrates backend, frontend, and PostgreSQL
+├── pipeline/      # Python data ingestion pipeline (httpx, psycopg2)
+└── docker-compose.yml  # Runs PostgreSQL for local development
 ```
- 
-Wait time data is sourced from [Queue-Times.com](https://queue-times.com), a public API that publishes official Disney park wait times updated every 5 minutes, with a historical database spanning back to 2014.
- 
+
+## Running locally
+
+**1. Start PostgreSQL** (uses the credentials in `backend/src/main/resources/application.properties`):
+
+```bash
+docker compose up -d
+```
+
+**2. Run the ingestion pipeline** to capture a wait-time snapshot:
+
+```bash
+cd pipeline
+pip install -r requirements.txt
+python main.py
+```
+
+**3. Start the backend API** (serves on `http://localhost:8080`):
+
+```bash
+cd backend
+./mvnw spring-boot:run
+```
+
+**4. Start the frontend** (serves on `http://localhost:3000`):
+
+```bash
+cd frontend
+npm install
+npm run dev
+```
+
+The frontend reads the backend URL from `NEXT_PUBLIC_API_BASE_URL` (see `frontend/.env.example`), defaulting to `http://localhost:8080`.
+
+## API Endpoints
+
+| Method | Path                          | Description                            |
+|--------|-------------------------------|----------------------------------------|
+| GET    | `/api/waittimes`              | All recorded wait-time snapshots       |
+| GET    | `/api/waittimes/park?name=`   | Snapshots for a given park             |
+| GET    | `/api/waittimes/ride?name=`   | Snapshots for a given ride             |
+| GET    | `/api/waittimes/trends?ride=` | Year-over-year average wait for a ride |
+
+## Roadmap
+
+- **Scheduled ingestion** — run the pipeline automatically instead of manually.
+- **Park attendance** — ingest yearly attendance as a long-term crowd proxy (model scaffolded in `backend/`).
+- **Ride uptime & daily crowd rank** — additional Queue-Times datasets (models scaffolded in `backend/`).
+- **Containerize the backend & frontend** so `docker compose up` runs the entire stack.
+- **Backend tests** covering the repository queries and controller endpoints.
+
+## Data source
+
+Wait time data is sourced from [Queue-Times.com](https://queue-times.com), a public API that publishes park wait times updated every ~5 minutes.
+
 > Powered by [Queue-Times.com](https://queue-times.com)
