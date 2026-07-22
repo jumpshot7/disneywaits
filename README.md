@@ -13,7 +13,7 @@ The official Queue-Times.com API only exposes **live** wait times — a snapshot
 - **Data Pipeline (`pipeline/`)** — Python (`httpx`, `psycopg2`).
     - Fetches the current wait time for every Magic Kingdom ride and inserts a timestamped snapshot into PostgreSQL.
     - Designed to be run repeatedly (e.g. via cron or a scheduler) to build history over time.
-- **Backend API (`backend/`)** — Spring Boot 3.5 (Java 25, Spring Data JPA).
+- **Backend API (`backend/`)** — Spring Boot 3.5 (Java 21, Spring Data JPA).
     - REST endpoints for all wait times, per-park and per-ride lookups, and a JPQL year-over-year average query.
 - **Frontend (`frontend/`)** — Next.js + TypeScript dashboard with Recharts.
     - Live stat cards, a top-10 longest-waits bar chart, and a full ride list.
@@ -22,7 +22,7 @@ The official Queue-Times.com API only exposes **live** wait times — a snapshot
 
 ```text
 .
-├── backend/       # Spring Boot REST API (Java 25, Spring Data JPA, PostgreSQL)
+├── backend/       # Spring Boot REST API (Java 21, Spring Data JPA, PostgreSQL)
 ├── frontend/      # Next.js + TypeScript dashboard with Recharts visualizations
 ├── pipeline/      # Python data ingestion pipeline (httpx, psycopg2)
 └── docker-compose.yml  # Runs PostgreSQL for local development

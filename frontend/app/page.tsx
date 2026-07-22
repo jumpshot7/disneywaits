@@ -23,11 +23,18 @@ interface WaitTime {
   recordedAt: string;
 }
 
+interface ParkAttendance {
+  parkId: number;
+  year: number;
+  attendance: number;
+}
+
 const API_BASE_URL =
   process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:8080";
 
 export default function Home() {
   const [waitTimes, setWaitTimes] = useState<WaitTime[]>([]);
+  const [attendance, setAttendance] = useState<ParkAttendance[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(function() {
@@ -41,6 +48,18 @@ export default function Home() {
       })
       .catch(function() {
         setLoading(false);
+      });
+
+    // Magic Kingdom = park 6. Attendance is returned oldest-year-first.
+    fetch(`${API_BASE_URL}/api/attendance/park?parkId=6`)
+      .then(function(res) {
+        return res.json();
+      })
+      .then(function(data) {
+        setAttendance(data);
+      })
+      .catch(function() {
+        // Attendance is optional; the dashboard still works without it.
       });
   }, []);
 
@@ -199,6 +218,54 @@ export default function Home() {
               </BarChart>
             </ResponsiveContainer>
           </div>
+
+          {/* Attendance by Year */}
+          {attendance.length > 0 && (
+            <div className="bg-white/5 border border-white/10 rounded-xl p-6">
+              <div className="text-xs text-white/40 uppercase tracking-widest mb-1">
+                Magic Kingdom Attendance by Year
+              </div>
+              <div className="text-xs text-white/30 mb-6">
+                The long-term crowd trend — annual attendance since 2006
+              </div>
+              <ResponsiveContainer width="100%" height={300}>
+                <LineChart data={attendance}>
+                  <CartesianGrid
+                    strokeDasharray="3 3"
+                    stroke="rgba(255,255,255,0.05)"
+                  />
+                  <XAxis
+                    dataKey="year"
+                    tick={{ fill: "rgba(255,255,255,0.4)", fontSize: 11 }}
+                  />
+                  <YAxis
+                    tick={{ fill: "rgba(255,255,255,0.4)", fontSize: 11 }}
+                    tickFormatter={function(value) {
+                      return Math.round(value / 1000000) + "M";
+                    }}
+                  />
+                  <Tooltip
+                    contentStyle={{
+                      backgroundColor: "#1a1a2e",
+                      border: "1px solid rgba(255,255,255,0.1)",
+                      borderRadius: "8px",
+                      color: "white",
+                    }}
+                    formatter={function(value) {
+                      return [Number(value).toLocaleString() + " guests", "Attendance"];
+                    }}
+                  />
+                  <Line
+                    type="monotone"
+                    dataKey="attendance"
+                    stroke="#60a5fa"
+                    strokeWidth={2}
+                    dot={{ fill: "#60a5fa", r: 3 }}
+                  />
+                </LineChart>
+              </ResponsiveContainer>
+            </div>
+          )}
 
           {/* Ride List */}
           <div className="bg-white/5 border border-white/10 rounded-xl p-6">
