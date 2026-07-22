@@ -1,0 +1,25 @@
+# Node / frontend
+node_modules/
+.next/
+out/
+npm-debug.log*
+
+# Environment files
+.env
+.env.local
+.env*.local
+
+# Java / Maven (backend)
+target/
+*.class
+
+# Python (pipeline)
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+
+# OS / editor
+.DS_Store
+Thumbs.db
+*.tsbuildinfo

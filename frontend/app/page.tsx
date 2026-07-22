@@ -23,12 +23,15 @@ interface WaitTime {
   recordedAt: string;
 }
 
+const API_BASE_URL =
+  process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:8080";
+
 export default function Home() {
   const [waitTimes, setWaitTimes] = useState<WaitTime[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(function() {
-    fetch("https://super-spoon-94wxvv675gvhr44-8080.app.github.dev/api/waittimes")
+    fetch(`${API_BASE_URL}/api/waittimes`)
       .then(function(res) {
         return res.json();
       })
