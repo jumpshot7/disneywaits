@@ -1,0 +1,43 @@
+name: Deploy frontend to Azure Storage static website
+
+on:
+  push:
+    branches: [ main ]
+    paths:
+      - 'frontend/**'
+      - '.github/workflows/deploy-frontend.yml'
+  workflow_dispatch:
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out the code
+        uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      # Build the static site ourselves so we control the Node version AND can
+      # bake the backend URL into the bundle at build time (NEXT_PUBLIC_* vars
+      # are embedded during `next build`, not read at runtime).
+      - name: Build the static site
+        working-directory: frontend
+        env:
+          NEXT_PUBLIC_API_BASE_URL: https://disneywaits-api-fbcjhyg2dnfnb7ct.northcentralus-01.azurewebsites.net
+        run: |
+          npm ci
+          npm run build
+
+      # Upload the static files to the storage account's built-in $web container.
+      # (Azure CLI is preinstalled on GitHub's ubuntu runners, so no extra setup.)
+      - name: Upload to Azure Storage static website
+        run: |
+          az storage blob upload-batch \
+            --account-name ${{ secrets.AZURE_STORAGE_ACCOUNT }} \
+            --account-key ${{ secrets.AZURE_STORAGE_KEY }} \
+            --destination '$web' \
+            --source frontend/out \
+            --overwrite
