@@ -1,0 +1,42 @@
+name: Deploy backend to Azure App Service
+
+# When should this pipeline run?
+on:
+  push:
+    branches: [ main ]          # every push to main...
+    paths:                       # ...but only if the backend (or this file) changed
+      - 'backend/**'
+      - '.github/workflows/deploy-backend.yml'
+  workflow_dispatch:             # ...or when you click "Run workflow" manually
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest       # GitHub gives us a fresh, clean Linux machine
+
+    steps:
+      # 1. Pull your repository onto the clean machine
+      - name: Check out the code
+        uses: actions/checkout@v4
+
+      # 2. Install the exact Java version your project targets
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: maven           # cache downloaded dependencies to speed up future runs
+
+      # 3. Build the runnable JAR (skip the DB-dependent test in CI for now)
+      - name: Build the JAR
+        working-directory: backend
+        run: |
+          chmod +x mvnw
+          ./mvnw -B clean package -DskipTests
+
+      # 4. Ship the JAR to your Azure App Service
+      - name: Deploy to Azure App Service
+        uses: azure/webapps-deploy@v3
+        with:
+          app-name: disneywaits-api
+          publish-profile: ${{ secrets.AZURE_WEBAPP_PUBLISH_PROFILE }}
+          package: backend/target/*.jar
