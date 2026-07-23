@@ -1,18 +1,24 @@
+import os
 import httpx
 import psycopg2
+from dotenv import load_dotenv
+
+# Load DB settings from a .env file if present (see .env.example)
+load_dotenv()
 
 # Park ID 6 = Magic Kingdom
 PARK_ID = 6
 ATTENDANCE_URL = f"https://queue-times.com/parks/{PARK_ID}/attendances/attendance_by_year"
 USER_AGENT = "disneywaits-student-portfolio/1.0 (educational use for a personal project)"
 
-# Database connection (matches docker-compose.yml / application.properties)
+# Database connection — defaults target local Postgres; override via .env for Azure
 conn = psycopg2.connect(
-    host="localhost",
-    port=5432,
-    database="disneywaits",
-    user="disney",
-    password="magic"
+    host=os.environ.get("DB_HOST", "localhost"),
+    port=os.environ.get("DB_PORT", "5432"),
+    dbname=os.environ.get("DB_NAME", "disneywaits"),
+    user=os.environ.get("DB_USER", "disney"),
+    password=os.environ.get("DB_PASSWORD", "magic"),
+    sslmode=os.environ.get("DB_SSLMODE", "prefer"),
 )
 cursor = conn.cursor()
 
