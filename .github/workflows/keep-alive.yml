@@ -1,0 +1,13 @@
+name: Keep Alive
+on:
+    workflow_dispatch:
+    schedule:
+        - cron: '*/20 * * * *'  
+jobs:
+    curl:
+        runs-on: ubuntu-latest
+        steps:
+            - name: Call Health Endpoint
+              run: |
+                  curl "https://disneywaits-api-fbcjhyg2dnfnb7ct.northcentralus-01.azurewebsites.net/actuator/health"
+        
