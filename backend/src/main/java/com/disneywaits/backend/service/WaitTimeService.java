@@ -33,6 +33,10 @@ public class WaitTimeService {
         return waitTimeRepository.findAverageWaitTimeByYear(rideName);
     }
 
+    public List<WaitTime> getLatestSnapshot(){
+        return waitTimeRepository.findLatestSnapshot();
+    }
+
     // Save a new wait time snapshot
     public WaitTime save(WaitTime waitTime) {
         return waitTimeRepository.save(waitTime);
