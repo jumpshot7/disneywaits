@@ -24,4 +24,6 @@ public interface WaitTimeRepository extends JpaRepository<WaitTime, Long> {
            "ORDER BY YEAR(w.recordedAt)")
     List<Object[]> findAverageWaitTimeByYear(String rideName);
 
+    @Query("SELECT w FROM WaitTime w WHERE w.recordedAt = (SELECT MAX(w2.recordedAt) FROM WaitTime w2)")
+    List<WaitTime> findLatestSnapshot();
 }

@@ -40,4 +40,10 @@ public class WaitTimeController {
         return ResponseEntity.ok(waitTimeService.getYearOverYearAverages(ride));
     }
 
+    // GET /api/waittimes/latest
+    @GetMapping("/latest")
+    public ResponseEntity<List<WaitTime>> getLastestSnapshot() {
+        return ResponseEntity.ok(waitTimeService.getLatestSnapshot());
+    }
+
 }
