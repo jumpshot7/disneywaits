@@ -38,7 +38,7 @@ export default function Home() {
   const [loading, setLoading] = useState(true);
 
   useEffect(function() {
-    fetch(`${API_BASE_URL}/api/waittimes`)
+    fetch(`${API_BASE_URL}/api/waittimes/latest`)
       .then(function(res) {
         return res.json();
       })
