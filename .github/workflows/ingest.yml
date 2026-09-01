@@ -3,7 +3,9 @@ name: Ingest Wait Times
 on:
   workflow_dispatch:
   schedule:
-    - cron: '*/30 * * * *'
+    # Offset off :00/:30 — GitHub's shared scheduler is most congested on round
+    # minutes, and scheduled runs are best-effort (delayed or dropped under load).
+    - cron: '7,37 * * * *'
 
 jobs:
   ingest:

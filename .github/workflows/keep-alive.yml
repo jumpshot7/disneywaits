@@ -2,7 +2,9 @@ name: Keep Alive
 on:
     workflow_dispatch:
     schedule:
-        - cron: '*/20 * * * *'  
+        # Offset off :00 for the same reason as ingest.yml, and staggered so the
+        # two workflows don't queue against each other.
+        - cron: '11,31,51 * * * *'
 jobs:
     curl:
         runs-on: ubuntu-latest
