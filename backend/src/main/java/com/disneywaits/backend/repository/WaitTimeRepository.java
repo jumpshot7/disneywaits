@@ -45,21 +45,16 @@ public interface WaitTimeRepository extends JpaRepository<WaitTime, Long> {
      * a number that describes no actual guest. Identify them from the data (a ride that has
      * never once posted a wait) rather than a hard-coded name list: the feed mixes straight
      * and curly apostrophes, so a literal list would silently fail to match.
+     *
+     * The subquery below is written out in both aggregates rather than shared as a constant.
+     * Java text blocks strip trailing whitespace from every line, so building the SQL by
+     * concatenation silently glued "AND" to the next token and produced "ANDride_name".
+     * Spelling each query out keeps it obvious and unbreakable.
+     *
+     * The HAVING floor exists because ingestion is best-effort: a few buckets rested on a
+     * single observation, and the 2-4 AM points plotted as a hard zero that dominated the
+     * chart's shape. Kept low because a per-ride view splits the data across ~18 hours.
      */
-    String QUEUEABLE_RIDES_ONLY = """
-            ride_name IN (
-                SELECT ride_name FROM wait_times WHERE is_open = true
-                GROUP BY ride_name HAVING MAX(wait_minutes) > 0
-            )
-            """;
-
-    /*
-     * Ingestion is best-effort, so a few buckets rest on a single observation — the 2-4 AM
-     * points were one reading each, plotting as a hard zero and dominating the chart's shape.
-     * Require a few observations before a bucket is reportable. Kept low because a per-ride
-     * view splits the same data across ~18 active hours.
-     */
-    String MIN_SAMPLES = "3";
 
     // Average wait per hour of the park day. Pass null for rideName to cover every ride.
     @Query(value = """
@@ -69,9 +64,12 @@ public interface WaitTimeRepository extends JpaRepository<WaitTime, Long> {
             FROM wait_times
             WHERE is_open = true
               AND (CAST(:rideName AS text) IS NULL OR ride_name = CAST(:rideName AS text))
-              AND """ + QUEUEABLE_RIDES_ONLY + """
+              AND ride_name IN (
+                  SELECT ride_name FROM wait_times WHERE is_open = true
+                  GROUP BY ride_name HAVING MAX(wait_minutes) > 0
+              )
             GROUP BY 1
-            HAVING COUNT(*) >= """ + MIN_SAMPLES + """
+            HAVING COUNT(*) >= 3
             ORDER BY 1
             """, nativeQuery = true)
     List<Object[]> findAverageWaitByHourOfDay(@Param("rideName") String rideName);
@@ -83,9 +81,12 @@ public interface WaitTimeRepository extends JpaRepository<WaitTime, Long> {
                    COUNT(*)
             FROM wait_times
             WHERE is_open = true
-              AND """ + QUEUEABLE_RIDES_ONLY + """
+              AND ride_name IN (
+                  SELECT ride_name FROM wait_times WHERE is_open = true
+                  GROUP BY ride_name HAVING MAX(wait_minutes) > 0
+              )
             GROUP BY 1
-            HAVING COUNT(*) >= """ + MIN_SAMPLES + """
+            HAVING COUNT(*) >= 3
             ORDER BY 1
             """, nativeQuery = true)
     List<Object[]> findAverageWaitByDayOfWeek();
