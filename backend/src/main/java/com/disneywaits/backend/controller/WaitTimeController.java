@@ -48,6 +48,12 @@ public class WaitTimeController {
         return ResponseEntity.ok(waitTimeService.getLatestSnapshot());
     }
 
+    // GET /api/waittimes/rides
+    @GetMapping("/rides")
+    public ResponseEntity<List<String>> getRideNames() {
+        return ResponseEntity.ok(waitTimeService.getRideNamesByDemand());
+    }
+
     // GET /api/waittimes/by-hour
     // GET /api/waittimes/by-hour?ride=Space Mountain
     @GetMapping("/by-hour")

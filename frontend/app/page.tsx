@@ -42,6 +42,15 @@ interface WeekdayAverage {
   sampleCount: number;
 }
 
+// A Disney day runs past midnight, so order hours from opening rather than from 12 AM —
+// otherwise the late-night hours, which are the END of an operating day, sort to the far
+// left as if they came first.
+const PARK_DAY_START = 6;
+
+function parkDayOrder(hour: number) {
+  return (hour - PARK_DAY_START + 24) % 24;
+}
+
 // Hours arrive as 0-23 in park local time.
 function formatHour(hour: number) {
   if (hour === 0) {
@@ -64,6 +73,9 @@ export default function Home() {
   const [attendance, setAttendance] = useState<ParkAttendance[]>([]);
   const [byHour, setByHour] = useState<HourlyAverage[]>([]);
   const [byWeekday, setByWeekday] = useState<WeekdayAverage[]>([]);
+  const [rides, setRides] = useState<string[]>([]);
+  // "" means every queueable ride combined.
+  const [selectedRide, setSelectedRide] = useState("");
   const [loading, setLoading] = useState(true);
 
   useEffect(function() {
@@ -91,17 +103,16 @@ export default function Home() {
         // Attendance is optional; the dashboard still works without it.
       });
 
-    // Historical aggregates over every snapshot collected so far, bucketed in
-    // park local time by the backend.
-    fetch(`${API_BASE_URL}/api/waittimes/by-hour`)
+    // Rides that actually post a wait, busiest first — populates the picker.
+    fetch(`${API_BASE_URL}/api/waittimes/rides`)
       .then(function(res) {
         return res.json();
       })
       .then(function(data) {
-        setByHour(data);
+        setRides(data);
       })
       .catch(function() {
-        // Optional; the live sections still render without it.
+        // Picker just stays on "all rides" if this fails.
       });
 
     fetch(`${API_BASE_URL}/api/waittimes/by-weekday`)
@@ -115,6 +126,28 @@ export default function Home() {
         // Optional; the live sections still render without it.
       });
   }, []);
+
+  // Refetches whenever the picker changes; "" asks the API for every queueable ride.
+  useEffect(function() {
+    const query = selectedRide === ""
+      ? ""
+      : `?ride=${encodeURIComponent(selectedRide)}`;
+
+    fetch(`${API_BASE_URL}/api/waittimes/by-hour${query}`)
+      .then(function(res) {
+        return res.json();
+      })
+      .then(function(data) {
+        setByHour(data);
+      })
+      .catch(function() {
+        setByHour([]);
+      });
+  }, [selectedRide]);
+
+  const hourChartData = [...byHour].sort(function(a, b) {
+    return parkDayOrder(a.hour) - parkDayOrder(b.hour);
+  });
 
   const openRides = waitTimes.filter(function(ride) {
     return ride.isOpen === true;
@@ -273,16 +306,43 @@ export default function Home() {
           </div>
 
           {/* Average Wait by Hour of Day */}
-          {byHour.length > 0 && (
+          {(rides.length > 0 || byHour.length > 0) && (
             <div className="bg-white/5 border border-white/10 rounded-xl p-6">
-              <div className="text-xs text-white/40 uppercase tracking-widest mb-1">
-                Average Wait by Hour of Day
+              <div className="flex items-start justify-between gap-4 mb-1">
+                <div className="text-xs text-white/40 uppercase tracking-widest">
+                  Average Wait by Hour of Day
+                </div>
+                <select
+                  value={selectedRide}
+                  onChange={function(e) {
+                    setSelectedRide(e.target.value);
+                  }}
+                  className="bg-[#1a1a2e] border border-white/10 rounded-lg px-3 py-1.5 text-xs text-white/80 max-w-[16rem] focus:outline-none focus:border-white/30"
+                >
+                  <option value="">All rides (combined)</option>
+                  {rides.map(function(ride) {
+                    return (
+                      <option key={ride} value={ride}>
+                        {ride}
+                      </option>
+                    );
+                  })}
+                </select>
               </div>
               <div className="text-xs text-white/30 mb-6">
-                Every snapshot collected so far, bucketed in park local time · open rides only
+                {selectedRide === ""
+                  ? "Averaged across every ride that posts a wait · attractions that never queue are excluded"
+                  : selectedRide}
+                {" · park local time"}
               </div>
+              {hourChartData.length === 0 && (
+                <div className="h-75 flex items-center justify-center text-white/30 text-xs">
+                  Not enough data collected for this ride yet
+                </div>
+              )}
+              {hourChartData.length > 0 && (
               <ResponsiveContainer width="100%" height={300}>
-                <LineChart data={byHour}>
+                <LineChart data={hourChartData}>
                   <CartesianGrid
                     strokeDasharray="3 3"
                     stroke="rgba(255,255,255,0.05)"
@@ -322,6 +382,7 @@ export default function Home() {
                   />
                 </LineChart>
               </ResponsiveContainer>
+              )}
             </div>
           )}
 

@@ -24,6 +24,13 @@ Two consequences worth knowing about:
 
 Closed rides report a wait of 0, so aggregates filter to open rides only — otherwise every overnight hour would average toward zero and flatten the real curve.
 
+Two further filters keep the aggregates honest:
+
+- **Only attractions that actually queue.** The source feed lists Cinderella Castle, a splash pad, the Main Street vehicles and a walking scavenger hunt alongside real rides; all four report a wait of 0 forever. Averaging TRON together with a building produces a number describing no guest's experience, so anything that has never once posted a wait is excluded. That set is derived from the data rather than hard-coded — the feed mixes straight and curly apostrophes, so a literal name list would silently fail to match.
+- **A minimum sample floor per bucket.** Some overnight hours rested on a single reading, which plotted as a hard zero and dominated the chart's shape. A bucket needs at least three observations to be reportable.
+
+Because averaging different rides together is only so meaningful, the hour-of-day chart also offers a per-ride view: "Seven Dwarfs Mine Train at 11 AM" is a real answer in a way that "the park at 11 AM" is not.
+
 ## Architecture & Tech Stack
 
 - **Data Pipeline (`pipeline/`)** — Python (`httpx`, `psycopg2`).
@@ -85,6 +92,7 @@ The frontend reads the backend URL from `NEXT_PUBLIC_API_BASE_URL` (see `fronten
 | GET    | `/api/waittimes/latest`          | Only the most recent snapshot — what the dashboard's live view uses |
 | GET    | `/api/waittimes/park?name=`      | Snapshots for a given park                                          |
 | GET    | `/api/waittimes/ride?name=`      | Snapshots for a given ride                                          |
+| GET    | `/api/waittimes/rides`           | Queueable rides, busiest first — drives the dashboard's ride picker |
 | GET    | `/api/waittimes/by-hour`         | Average wait per hour of the park day; optional `?ride=` filter     |
 | GET    | `/api/waittimes/by-weekday`      | Average wait per day of week                                        |
 | GET    | `/api/waittimes/trends?ride=`    | Average wait grouped by year — needs multiple years to say anything |
