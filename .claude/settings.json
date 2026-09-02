@@ -1,0 +1,8 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(PYTHONIOENCODING=utf-8 python \"C:/Users/zmamd/AppData/Local/Temp/claude/c--Users-zmamd-disneywaits/1ded6451-8a45-43f3-a012-c76d3338a662/scratchpad/validate_v2.py\")",
+      "Bash(npm run *)"
+    ]
+  }
+}

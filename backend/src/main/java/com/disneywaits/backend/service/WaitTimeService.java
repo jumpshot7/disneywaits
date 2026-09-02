@@ -44,6 +44,11 @@ public class WaitTimeService {
         return waitTimeRepository.findLatestSnapshot();
     }
 
+    // Queueable rides, busiest first — drives the dashboard's ride picker.
+    public List<String> getRideNamesByDemand() {
+        return waitTimeRepository.findRideNamesByDemand();
+    }
+
     // Average wait per hour of the park day. Pass null for rideName to cover every ride.
     public List<HourlyAverage> getAverageWaitByHourOfDay(String rideName) {
         return waitTimeRepository.findAverageWaitByHourOfDay(rideName).stream()
