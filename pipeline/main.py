@@ -1,6 +1,6 @@
 import logging
 import os
-from datetime import datetime
+from datetime import datetime, timezone
 
 import httpx
 import psycopg2
@@ -33,7 +33,11 @@ def fetch_wait_times():
 
 def ingest():
     data = fetch_wait_times()
-    recorded_at = datetime.now()
+    # Always UTC, never the host's local clock. CI runners are UTC but a laptop may
+    # not be, and recorded_at is a naive TIMESTAMP column — so a local run with
+    # datetime.now() would silently mix Eastern rows into a UTC dataset. Readers
+    # convert to park time (America/New_York) at query time.
+    recorded_at = datetime.now(timezone.utc)
     inserted = 0
 
     with get_conn() as conn:
