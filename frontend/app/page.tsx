@@ -11,7 +11,6 @@ import {
   ResponsiveContainer,
   BarChart,
   Bar,
-  Cell,
 } from "recharts";
 
 interface WaitTime {
@@ -42,9 +41,19 @@ interface WeekdayAverage {
   sampleCount: number;
 }
 
-// A Disney day runs past midnight, so order hours from opening rather than from 12 AM —
-// otherwise the late-night hours, which are the END of an operating day, sort to the far
-// left as if they came first.
+const API_BASE_URL =
+  process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:8080";
+
+// One accent for every mark on the page. Bars are not colored by their own value:
+// length already encodes magnitude, so hue would just repeat it and burn the only
+// channel left for real distinctions.
+const SERIES = "#3987e5";
+const GRID = "#26262b";
+const AXIS_INK = "#71717a";
+
+// A Disney day runs past midnight, so order hours from opening rather than from
+// 12 AM — otherwise late-night hours, which are the END of an operating day, sort
+// to the far left as if they came first.
 const PARK_DAY_START = 6;
 
 function parkDayOrder(hour: number) {
@@ -65,8 +74,101 @@ function formatHour(hour: number) {
   return hour - 12 + " PM";
 }
 
-const API_BASE_URL =
-  process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:8080";
+/*
+ * Feed names run long enough to break any axis — "Meet Mickey Mouse and Minnie
+ * Mouse at Mickey's Not-So-Scary Halloween Party" is one entry. Character meets
+ * are named "<Character> at <Venue>" and the venue is noise on a chart, so drop
+ * it; everything else just gets a clean tail truncation.
+ */
+function shortenRideName(name: string) {
+  let short = name.replace(/^Meet /, "");
+  const venueAt = short.indexOf(" at ");
+  if (venueAt > 0) {
+    short = short.slice(0, venueAt);
+  }
+  // 26 keeps the longest label inside the 168px axis column at 11px; 30 sat right
+  // on the overflow line, which is the clipping this chart is meant to fix.
+  if (short.length > 26) {
+    short = short.slice(0, 25).trimEnd() + "…";
+  }
+  return short;
+}
+
+interface TooltipEntry {
+  value?: number | string;
+  payload?: { sampleCount?: number };
+}
+
+interface ChartTooltipProps {
+  active?: boolean;
+  payload?: readonly TooltipEntry[];
+  label?: string | number;
+  formatLabel?: (label: string | number) => string;
+  formatValue?: (value: number | string | undefined) => string;
+}
+
+// Value leads and labels follow: the reader already knows which mark they are on
+// and wants the number. Width is capped so a long ride name wraps instead of
+// stretching a box across the plot.
+function ChartTooltip({
+  active,
+  payload,
+  label,
+  formatLabel,
+  formatValue,
+}: ChartTooltipProps) {
+  if (active !== true || payload === undefined || payload.length === 0) {
+    return null;
+  }
+
+  const entry = payload[0];
+  const samples = entry.payload?.sampleCount;
+  const caption = formatLabel ? formatLabel(label ?? "") : String(label ?? "");
+  const value = formatValue ? formatValue(entry.value) : entry.value + " min";
+
+  return (
+    <div className="max-w-60 rounded-lg border border-[#2f2f36] bg-[#1c1c21] px-3 py-2 shadow-xl">
+      <div className="text-sm font-semibold text-white">{value}</div>
+      <div className="mt-0.5 text-xs leading-snug break-words text-zinc-400">
+        {caption}
+      </div>
+      {samples !== undefined && (
+        <div className="mt-1.5 text-[11px] text-zinc-500">
+          {samples.toLocaleString()} observations
+        </div>
+      )}
+    </div>
+  );
+}
+
+function Card({
+  title,
+  caption,
+  action,
+  children,
+}: {
+  title: string;
+  caption?: string;
+  action?: React.ReactNode;
+  children: React.ReactNode;
+}) {
+  return (
+    <section className="rounded-xl border border-[#26262b] bg-[#16161a] p-5 sm:p-6">
+      <div className="mb-5 flex items-start justify-between gap-4">
+        <div>
+          <h2 className="text-sm font-medium text-zinc-100">{title}</h2>
+          {caption && (
+            <p className="mt-1 text-xs leading-relaxed text-zinc-500">
+              {caption}
+            </p>
+          )}
+        </div>
+        {action}
+      </div>
+      {children}
+    </section>
+  );
+}
 
 export default function Home() {
   const [waitTimes, setWaitTimes] = useState<WaitTime[]>([]);
@@ -78,83 +180,77 @@ export default function Home() {
   const [selectedRide, setSelectedRide] = useState("");
   const [loading, setLoading] = useState(true);
 
-  useEffect(function() {
+  useEffect(function () {
     fetch(`${API_BASE_URL}/api/waittimes/latest`)
-      .then(function(res) {
+      .then(function (res) {
         return res.json();
       })
-      .then(function(data) {
+      .then(function (data) {
         setWaitTimes(data);
         setLoading(false);
       })
-      .catch(function() {
+      .catch(function () {
         setLoading(false);
       });
 
     // Magic Kingdom = park 6. Attendance is returned oldest-year-first.
     fetch(`${API_BASE_URL}/api/attendance/park?parkId=6`)
-      .then(function(res) {
+      .then(function (res) {
         return res.json();
       })
-      .then(function(data) {
+      .then(function (data) {
         setAttendance(data);
       })
-      .catch(function() {
+      .catch(function () {
         // Attendance is optional; the dashboard still works without it.
       });
 
     // Rides that actually post a wait, busiest first — populates the picker.
     fetch(`${API_BASE_URL}/api/waittimes/rides`)
-      .then(function(res) {
+      .then(function (res) {
         return res.json();
       })
-      .then(function(data) {
+      .then(function (data) {
         setRides(data);
       })
-      .catch(function() {
+      .catch(function () {
         // Picker just stays on "all rides" if this fails.
       });
 
     fetch(`${API_BASE_URL}/api/waittimes/by-weekday`)
-      .then(function(res) {
+      .then(function (res) {
         return res.json();
       })
-      .then(function(data) {
+      .then(function (data) {
         setByWeekday(data);
       })
-      .catch(function() {
+      .catch(function () {
         // Optional; the live sections still render without it.
       });
   }, []);
 
   // Refetches whenever the picker changes; "" asks the API for every queueable ride.
-  useEffect(function() {
-    const query = selectedRide === ""
-      ? ""
-      : `?ride=${encodeURIComponent(selectedRide)}`;
+  useEffect(
+    function () {
+      const query =
+        selectedRide === "" ? "" : `?ride=${encodeURIComponent(selectedRide)}`;
 
-    fetch(`${API_BASE_URL}/api/waittimes/by-hour${query}`)
-      .then(function(res) {
-        return res.json();
-      })
-      .then(function(data) {
-        setByHour(data);
-      })
-      .catch(function() {
-        setByHour([]);
-      });
-  }, [selectedRide]);
+      fetch(`${API_BASE_URL}/api/waittimes/by-hour${query}`)
+        .then(function (res) {
+          return res.json();
+        })
+        .then(function (data) {
+          setByHour(data);
+        })
+        .catch(function () {
+          setByHour([]);
+        });
+    },
+    [selectedRide]
+  );
 
-  const hourChartData = [...byHour].sort(function(a, b) {
-    return parkDayOrder(a.hour) - parkDayOrder(b.hour);
-  });
-
-  const openRides = waitTimes.filter(function(ride) {
+  const openRides = waitTimes.filter(function (ride) {
     return ride.isOpen === true;
-  });
-
-  const closedRides = waitTimes.filter(function(ride) {
-    return ride.isOpen === false;
   });
 
   let totalWaitMinutes = 0;
@@ -177,365 +273,351 @@ export default function Home() {
     }
   }
 
-  const sortedRides = [...openRides].sort(function(a, b) {
-    return b.waitMinutes - a.waitMinutes;
+  const topTen = [...openRides]
+    .sort(function (a, b) {
+      return b.waitMinutes - a.waitMinutes;
+    })
+    .slice(0, 10);
+
+  const hourChartData = [...byHour].sort(function (a, b) {
+    return parkDayOrder(a.hour) - parkDayOrder(b.hour);
   });
 
-  const chartData = sortedRides.slice(0, 10);
+  let capturedAt = "";
+  if (waitTimes.length > 0) {
+    capturedAt = new Date(waitTimes[0].recordedAt + "Z").toLocaleString(
+      undefined,
+      { dateStyle: "medium", timeStyle: "short" }
+    );
+  }
+
+  const stats = [
+    { label: "Attractions tracked", value: String(waitTimes.length) },
+    { label: "Currently open", value: String(openRides.length) },
+    { label: "Average wait", value: avgWait + " min" },
+    {
+      label: "Longest wait",
+      value: longestWait !== null ? longestWait.waitMinutes + " min" : "—",
+      detail: longestWait !== null ? shortenRideName(longestWait.rideName) : "",
+    },
+  ];
 
   return (
-    <main className="min-h-screen bg-[#0a0a0f] text-white font-mono">
-
-      {/* Header */}
-      <div className="border-b border-white/10 px-8 py-6 flex items-center justify-between">
-        <div>
-          <div className="text-xs text-blue-400 tracking-[0.3em] uppercase mb-1">
-            Magic Kingdom · Live Data
+    <main className="min-h-screen bg-[#0b0b0e] text-zinc-100">
+      <div className="mx-auto max-w-6xl px-5 py-10 sm:px-8">
+        <header className="mb-10 flex flex-wrap items-end justify-between gap-4 border-b border-[#26262b] pb-6">
+          <div>
+            <h1 className="text-2xl font-semibold tracking-tight">
+              Disney<span className="text-[#3987e5]">Waits</span>
+            </h1>
+            <p className="mt-1.5 text-sm text-zinc-500">
+              Magic Kingdom wait times, and whether they are getting worse.
+            </p>
           </div>
-          <h1 className="text-3xl font-bold tracking-tight">
-            Disney<span className="text-blue-400">Waits</span>
-          </h1>
-        </div>
-        <div className="text-xs text-white/40 text-right">
-          <div>Are wait times getting worse?</div>
-          <div className="text-white/20">Powered by Queue-Times.com</div>
-        </div>
-      </div>
-
-      {/* Loading State */}
-      {loading === true && (
-        <div className="flex items-center justify-center h-96 text-white/40">
-          Loading wait times...
-        </div>
-      )}
-
-      {/* Main Content */}
-      {loading === false && (
-        <div className="px-8 py-8 space-y-8">
-
-          {/* Stat Cards */}
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-
-            <div className="bg-white/5 border border-white/10 rounded-xl p-5">
-              <div className="text-xs text-white/40 uppercase tracking-widest mb-2">
-                Total Rides
-              </div>
-              <div className="text-4xl font-bold">{waitTimes.length}</div>
-            </div>
-
-            <div className="bg-white/5 border border-white/10 rounded-xl p-5">
-              <div className="text-xs text-white/40 uppercase tracking-widest mb-2">
-                Rides Open
-              </div>
-              <div className="text-4xl font-bold text-green-400">
-                {openRides.length}
-              </div>
-            </div>
-
-            <div className="bg-white/5 border border-white/10 rounded-xl p-5">
-              <div className="text-xs text-white/40 uppercase tracking-widest mb-2">
-                Avg Wait
-              </div>
-              <div className="text-4xl font-bold text-blue-400">
-                {avgWait}
-                <span className="text-lg text-white/40">m</span>
-              </div>
-            </div>
-
-            <div className="bg-white/5 border border-white/10 rounded-xl p-5">
-              <div className="text-xs text-white/40 uppercase tracking-widest mb-2">
-                Longest Wait
-              </div>
-              <div className="text-4xl font-bold text-orange-400">
-                {longestWait !== null ? longestWait.waitMinutes : 0}
-                <span className="text-lg text-white/40">m</span>
-              </div>
-              <div className="text-xs text-white/30 mt-1 truncate">
-                {longestWait !== null ? longestWait.rideName : "—"}
-              </div>
-            </div>
-
-          </div>
-
-          {/* Bar Chart */}
-          <div className="bg-white/5 border border-white/10 rounded-xl p-6">
-            <div className="text-xs text-white/40 uppercase tracking-widest mb-6">
-              Top 10 Longest Waits Right Now
-            </div>
-            <ResponsiveContainer width="100%" height={300}>
-              <BarChart data={chartData}>
-                <CartesianGrid
-                  strokeDasharray="3 3"
-                  stroke="rgba(255,255,255,0.05)"
-                />
-                <XAxis
-                  dataKey="rideName"
-                  tick={{ fill: "rgba(255,255,255,0.4)", fontSize: 10 }}
-                  angle={-25}
-                  textAnchor="end"
-                  height={60}
-                />
-                <YAxis
-                  tick={{ fill: "rgba(255,255,255,0.4)", fontSize: 11 }}
-                  unit="m"
-                />
-                <Tooltip
-                  contentStyle={{
-                    backgroundColor: "#1a1a2e",
-                    border: "1px solid rgba(255,255,255,0.1)",
-                    borderRadius: "8px",
-                    color: "white",
-                  }}
-                  formatter={function(value) {
-                    return [`${value} min`, "Wait Time"];
-                  }}
-                />
-                <Bar dataKey="waitMinutes" radius={[4, 4, 0, 0]}>
-                  {chartData.map(function(entry, index) {
-                    let barColor = "#34d399";
-                    if (entry.waitMinutes > 60) {
-                      barColor = "#f97316";
-                    } else if (entry.waitMinutes > 30) {
-                      barColor = "#60a5fa";
-                    }
-                    return <Cell key={index} fill={barColor} />;
-                  })}
-                </Bar>
-              </BarChart>
-            </ResponsiveContainer>
-          </div>
-
-          {/* Average Wait by Hour of Day */}
-          {(rides.length > 0 || byHour.length > 0) && (
-            <div className="bg-white/5 border border-white/10 rounded-xl p-6">
-              <div className="flex items-start justify-between gap-4 mb-1">
-                <div className="text-xs text-white/40 uppercase tracking-widest">
-                  Average Wait by Hour of Day
-                </div>
-                <select
-                  value={selectedRide}
-                  onChange={function(e) {
-                    setSelectedRide(e.target.value);
-                  }}
-                  className="bg-[#1a1a2e] border border-white/10 rounded-lg px-3 py-1.5 text-xs text-white/80 max-w-[16rem] focus:outline-none focus:border-white/30"
-                >
-                  <option value="">All rides (combined)</option>
-                  {rides.map(function(ride) {
-                    return (
-                      <option key={ride} value={ride}>
-                        {ride}
-                      </option>
-                    );
-                  })}
-                </select>
-              </div>
-              <div className="text-xs text-white/30 mb-6">
-                {selectedRide === ""
-                  ? "Averaged across every ride that posts a wait · attractions that never queue are excluded"
-                  : selectedRide}
-                {" · park local time"}
-              </div>
-              {hourChartData.length === 0 && (
-                <div className="h-75 flex items-center justify-center text-white/30 text-xs">
-                  Not enough data collected for this ride yet
-                </div>
-              )}
-              {hourChartData.length > 0 && (
-              <ResponsiveContainer width="100%" height={300}>
-                <LineChart data={hourChartData}>
-                  <CartesianGrid
-                    strokeDasharray="3 3"
-                    stroke="rgba(255,255,255,0.05)"
-                  />
-                  <XAxis
-                    dataKey="hour"
-                    tickFormatter={formatHour}
-                    tick={{ fill: "rgba(255,255,255,0.4)", fontSize: 11 }}
-                  />
-                  <YAxis
-                    tick={{ fill: "rgba(255,255,255,0.4)", fontSize: 11 }}
-                    unit="m"
-                  />
-                  <Tooltip
-                    contentStyle={{
-                      backgroundColor: "#1a1a2e",
-                      border: "1px solid rgba(255,255,255,0.1)",
-                      borderRadius: "8px",
-                      color: "white",
-                    }}
-                    labelFormatter={function(hour) {
-                      return formatHour(Number(hour));
-                    }}
-                    formatter={function(value, name, item) {
-                      return [
-                        `${value} min · ${item.payload.sampleCount} observations`,
-                        "Avg Wait",
-                      ];
-                    }}
-                  />
-                  <Line
-                    type="monotone"
-                    dataKey="avgWait"
-                    stroke="#f97316"
-                    strokeWidth={2}
-                    dot={{ fill: "#f97316", r: 3 }}
-                  />
-                </LineChart>
-              </ResponsiveContainer>
-              )}
+          {capturedAt !== "" && (
+            <div className="text-xs text-zinc-500">
+              Snapshot captured {capturedAt}
             </div>
           )}
+        </header>
 
-          {/* Average Wait by Day of Week */}
-          {byWeekday.length > 0 && (
-            <div className="bg-white/5 border border-white/10 rounded-xl p-6">
-              <div className="text-xs text-white/40 uppercase tracking-widest mb-1">
-                Average Wait by Day of Week
-              </div>
-              <div className="text-xs text-white/30 mb-6">
-                Which days actually run busier · open rides only
-              </div>
-              <ResponsiveContainer width="100%" height={300}>
-                <BarChart data={byWeekday}>
-                  <CartesianGrid
-                    strokeDasharray="3 3"
-                    stroke="rgba(255,255,255,0.05)"
-                  />
-                  <XAxis
-                    dataKey="dayName"
-                    tickFormatter={function(dayName) {
-                      return String(dayName).slice(0, 3);
-                    }}
-                    tick={{ fill: "rgba(255,255,255,0.4)", fontSize: 11 }}
-                  />
-                  <YAxis
-                    tick={{ fill: "rgba(255,255,255,0.4)", fontSize: 11 }}
-                    unit="m"
-                  />
-                  <Tooltip
-                    cursor={{ fill: "rgba(255,255,255,0.04)" }}
-                    contentStyle={{
-                      backgroundColor: "#1a1a2e",
-                      border: "1px solid rgba(255,255,255,0.1)",
-                      borderRadius: "8px",
-                      color: "white",
-                    }}
-                    formatter={function(value, name, item) {
-                      return [
-                        `${value} min · ${item.payload.sampleCount} observations`,
-                        "Avg Wait",
-                      ];
-                    }}
-                  />
-                  <Bar
-                    dataKey="avgWait"
-                    fill="#a78bfa"
-                    radius={[4, 4, 0, 0]}
-                  />
-                </BarChart>
-              </ResponsiveContainer>
-            </div>
-          )}
+        {loading === true && (
+          <div className="flex h-96 items-center justify-center text-sm text-zinc-500">
+            Loading wait times…
+          </div>
+        )}
 
-          {/* Attendance by Year */}
-          {attendance.length > 0 && (
-            <div className="bg-white/5 border border-white/10 rounded-xl p-6">
-              <div className="text-xs text-white/40 uppercase tracking-widest mb-1">
-                Magic Kingdom Attendance by Year
-              </div>
-              <div className="text-xs text-white/30 mb-6">
-                The long-term crowd trend — annual attendance since 2006
-              </div>
-              <ResponsiveContainer width="100%" height={300}>
-                <LineChart data={attendance}>
-                  <CartesianGrid
-                    strokeDasharray="3 3"
-                    stroke="rgba(255,255,255,0.05)"
-                  />
-                  <XAxis
-                    dataKey="year"
-                    tick={{ fill: "rgba(255,255,255,0.4)", fontSize: 11 }}
-                  />
-                  <YAxis
-                    tick={{ fill: "rgba(255,255,255,0.4)", fontSize: 11 }}
-                    tickFormatter={function(value) {
-                      return Math.round(value / 1000000) + "M";
-                    }}
-                  />
-                  <Tooltip
-                    contentStyle={{
-                      backgroundColor: "#1a1a2e",
-                      border: "1px solid rgba(255,255,255,0.1)",
-                      borderRadius: "8px",
-                      color: "white",
-                    }}
-                    formatter={function(value) {
-                      return [Number(value).toLocaleString() + " guests", "Attendance"];
-                    }}
-                  />
-                  <Line
-                    type="monotone"
-                    dataKey="attendance"
-                    stroke="#60a5fa"
-                    strokeWidth={2}
-                    dot={{ fill: "#60a5fa", r: 3 }}
-                  />
-                </LineChart>
-              </ResponsiveContainer>
-            </div>
-          )}
-
-          {/* Ride List */}
-          <div className="bg-white/5 border border-white/10 rounded-xl p-6">
-            <div className="text-xs text-white/40 uppercase tracking-widest mb-6">
-              All Rides
-            </div>
-            <div className="space-y-2">
-              {[...waitTimes].sort(function(a, b) {
-                return b.waitMinutes - a.waitMinutes;
-              }).map(function(ride) {
-                let waitColor = "text-green-400";
-                if (ride.waitMinutes > 60) {
-                  waitColor = "text-orange-400";
-                } else if (ride.waitMinutes > 30) {
-                  waitColor = "text-blue-400";
-                }
+        {loading === false && (
+          <div className="space-y-6">
+            <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+              {stats.map(function (stat) {
                 return (
                   <div
-                    key={ride.id}
-                    className="flex items-center justify-between py-3 border-b border-white/5"
+                    key={stat.label}
+                    className="rounded-xl border border-[#26262b] bg-[#16161a] p-5"
                   >
-                    <div className="flex items-center gap-3">
-                      <div
-                        className={ride.isOpen === true
-                          ? "w-2 h-2 rounded-full bg-green-400"
-                          : "w-2 h-2 rounded-full bg-red-400"
-                        }
-                      />
-                      <span className="text-sm text-white/80">
-                        {ride.rideName}
-                      </span>
+                    <div className="text-xs text-zinc-500">{stat.label}</div>
+                    <div className="mt-2 text-3xl font-semibold tracking-tight text-white">
+                      {stat.value}
                     </div>
-                    <span className={"text-sm font-bold " + waitColor}>
-                      {ride.isOpen === true
-                        ? ride.waitMinutes + " min"
-                        : "Closed"
-                      }
-                    </span>
+                    {stat.detail !== undefined && stat.detail !== "" && (
+                      <div className="mt-1 truncate text-xs text-zinc-500">
+                        {stat.detail}
+                      </div>
+                    )}
                   </div>
                 );
               })}
             </div>
+
+            {/*
+              Horizontal bars: ride names are far too long to sit under a vertical
+              axis, where they were rotating and clipping mid-word.
+            */}
+            {topTen.length > 0 && (
+              <Card
+                title="Longest waits right now"
+                caption="Open attractions, current snapshot"
+              >
+                <ResponsiveContainer width="100%" height={340}>
+                  <BarChart
+                    data={topTen}
+                    layout="vertical"
+                    margin={{ top: 4, right: 16, bottom: 4, left: 4 }}
+                  >
+                    <CartesianGrid horizontal={false} stroke={GRID} />
+                    <XAxis
+                      type="number"
+                      unit="m"
+                      tick={{ fill: AXIS_INK, fontSize: 11 }}
+                      axisLine={false}
+                      tickLine={false}
+                    />
+                    <YAxis
+                      type="category"
+                      dataKey="rideName"
+                      width={168}
+                      tickFormatter={shortenRideName}
+                      tick={{ fill: AXIS_INK, fontSize: 11 }}
+                      axisLine={false}
+                      tickLine={false}
+                    />
+                    <Tooltip
+                      cursor={{ fill: "rgba(255,255,255,0.04)" }}
+                      content={<ChartTooltip />}
+                    />
+                    <Bar
+                      dataKey="waitMinutes"
+                      fill={SERIES}
+                      barSize={14}
+                      radius={[0, 4, 4, 0]}
+                    />
+                  </BarChart>
+                </ResponsiveContainer>
+              </Card>
+            )}
+
+            {(rides.length > 0 || byHour.length > 0) && (
+              <Card
+                title="Average wait by hour of day"
+                caption={
+                  selectedRide === ""
+                    ? "Every snapshot collected so far, park local time. Attractions that never queue are excluded."
+                    : "Every snapshot collected so far, park local time."
+                }
+                action={
+                  <select
+                    value={selectedRide}
+                    onChange={function (e) {
+                      setSelectedRide(e.target.value);
+                    }}
+                    className="max-w-56 rounded-lg border border-[#2f2f36] bg-[#1c1c21] px-2.5 py-1.5 text-xs text-zinc-300 focus:border-[#3987e5] focus:outline-none"
+                  >
+                    <option value="">All rides combined</option>
+                    {rides.map(function (ride) {
+                      return (
+                        <option key={ride} value={ride}>
+                          {shortenRideName(ride)}
+                        </option>
+                      );
+                    })}
+                  </select>
+                }
+              >
+                {hourChartData.length === 0 ? (
+                  <div className="flex h-72 items-center justify-center text-xs text-zinc-500">
+                    Not enough data collected for this ride yet
+                  </div>
+                ) : (
+                  <ResponsiveContainer width="100%" height={288}>
+                    <LineChart
+                      data={hourChartData}
+                      margin={{ top: 4, right: 12, bottom: 4, left: -12 }}
+                    >
+                      <CartesianGrid vertical={false} stroke={GRID} />
+                      <XAxis
+                        dataKey="hour"
+                        tickFormatter={formatHour}
+                        tick={{ fill: AXIS_INK, fontSize: 11 }}
+                        axisLine={false}
+                        tickLine={false}
+                        interval="preserveStartEnd"
+                        minTickGap={16}
+                      />
+                      <YAxis
+                        unit="m"
+                        tick={{ fill: AXIS_INK, fontSize: 11 }}
+                        axisLine={false}
+                        tickLine={false}
+                      />
+                      <Tooltip
+                        cursor={{ stroke: GRID }}
+                        content={
+                          <ChartTooltip
+                            formatLabel={function (label) {
+                              return formatHour(Number(label));
+                            }}
+                          />
+                        }
+                      />
+                      <Line
+                        type="monotone"
+                        dataKey="avgWait"
+                        stroke={SERIES}
+                        strokeWidth={2}
+                        dot={false}
+                        activeDot={{ r: 4, fill: SERIES }}
+                      />
+                    </LineChart>
+                  </ResponsiveContainer>
+                )}
+              </Card>
+            )}
+
+            {byWeekday.length > 0 && (
+              <Card
+                title="Average wait by day of week"
+                caption="Which days actually run busier"
+              >
+                <ResponsiveContainer width="100%" height={240}>
+                  <BarChart
+                    data={byWeekday}
+                    margin={{ top: 4, right: 12, bottom: 4, left: -12 }}
+                  >
+                    <CartesianGrid vertical={false} stroke={GRID} />
+                    <XAxis
+                      dataKey="dayName"
+                      tickFormatter={function (dayName) {
+                        return String(dayName).slice(0, 3);
+                      }}
+                      tick={{ fill: AXIS_INK, fontSize: 11 }}
+                      axisLine={false}
+                      tickLine={false}
+                    />
+                    <YAxis
+                      unit="m"
+                      tick={{ fill: AXIS_INK, fontSize: 11 }}
+                      axisLine={false}
+                      tickLine={false}
+                    />
+                    <Tooltip
+                      cursor={{ fill: "rgba(255,255,255,0.04)" }}
+                      content={<ChartTooltip />}
+                    />
+                    <Bar
+                      dataKey="avgWait"
+                      fill={SERIES}
+                      barSize={28}
+                      radius={[4, 4, 0, 0]}
+                    />
+                  </BarChart>
+                </ResponsiveContainer>
+              </Card>
+            )}
+
+            {attendance.length > 0 && (
+              <Card
+                title="Magic Kingdom attendance by year"
+                caption="The long-term crowd trend, from published annual attendance"
+              >
+                <ResponsiveContainer width="100%" height={240}>
+                  <LineChart
+                    data={attendance}
+                    margin={{ top: 4, right: 12, bottom: 4, left: -4 }}
+                  >
+                    <CartesianGrid vertical={false} stroke={GRID} />
+                    <XAxis
+                      dataKey="year"
+                      tick={{ fill: AXIS_INK, fontSize: 11 }}
+                      axisLine={false}
+                      tickLine={false}
+                      minTickGap={16}
+                    />
+                    <YAxis
+                      tick={{ fill: AXIS_INK, fontSize: 11 }}
+                      axisLine={false}
+                      tickLine={false}
+                      tickFormatter={function (value) {
+                        return Math.round(Number(value) / 1000000) + "M";
+                      }}
+                    />
+                    <Tooltip
+                      cursor={{ stroke: GRID }}
+                      content={
+                        <ChartTooltip
+                          formatValue={function (value) {
+                            return Number(value).toLocaleString() + " guests";
+                          }}
+                        />
+                      }
+                    />
+                    <Line
+                      type="monotone"
+                      dataKey="attendance"
+                      stroke={SERIES}
+                      strokeWidth={2}
+                      dot={false}
+                      activeDot={{ r: 4, fill: SERIES }}
+                    />
+                  </LineChart>
+                </ResponsiveContainer>
+              </Card>
+            )}
+
+            {/* The table view: every value above stays reachable without hovering. */}
+            <Card title="All attractions" caption="Current snapshot">
+              <div className="-mx-1">
+                {[...waitTimes]
+                  .sort(function (a, b) {
+                    return b.waitMinutes - a.waitMinutes;
+                  })
+                  .map(function (ride) {
+                    return (
+                      <div
+                        key={ride.id}
+                        className="flex items-center justify-between gap-4 border-b border-[#26262b] px-1 py-2.5 last:border-b-0"
+                      >
+                        <div className="flex min-w-0 items-center gap-2.5">
+                          <span
+                            className={
+                              ride.isOpen === true
+                                ? "size-1.5 shrink-0 rounded-full bg-[#3987e5]"
+                                : "size-1.5 shrink-0 rounded-full bg-zinc-700"
+                            }
+                          />
+                          <span className="truncate text-sm text-zinc-300">
+                            {ride.rideName}
+                          </span>
+                        </div>
+                        <span
+                          className={
+                            ride.isOpen === true
+                              ? "shrink-0 text-sm text-zinc-100 tabular-nums"
+                              : "shrink-0 text-sm text-zinc-600"
+                          }
+                        >
+                          {ride.isOpen === true
+                            ? ride.waitMinutes + " min"
+                            : "Closed"}
+                        </span>
+                      </div>
+                    );
+                  })}
+              </div>
+            </Card>
+
+            <footer className="pt-2 pb-6 text-center text-xs text-zinc-600">
+              Data from{" "}
+              <a
+                href="https://queue-times.com"
+                className="text-zinc-500 underline underline-offset-2 hover:text-zinc-400"
+              >
+                Queue-Times.com
+              </a>
+            </footer>
           </div>
-
-          {/* Footer */}
-          <div className="text-center text-xs text-white/20 pb-4">
-            Data sourced from Queue-Times.com · Updated on pipeline run
-          </div>
-
-        </div>
-      )}
-
+        )}
+      </div>
     </main>
   );
 }
