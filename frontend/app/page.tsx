@@ -29,12 +29,41 @@ interface ParkAttendance {
   attendance: number;
 }
 
+interface HourlyAverage {
+  hour: number;
+  avgWait: number;
+  sampleCount: number;
+}
+
+interface WeekdayAverage {
+  dayOfWeek: number;
+  dayName: string;
+  avgWait: number;
+  sampleCount: number;
+}
+
+// Hours arrive as 0-23 in park local time.
+function formatHour(hour: number) {
+  if (hour === 0) {
+    return "12 AM";
+  }
+  if (hour === 12) {
+    return "12 PM";
+  }
+  if (hour < 12) {
+    return hour + " AM";
+  }
+  return hour - 12 + " PM";
+}
+
 const API_BASE_URL =
   process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:8080";
 
 export default function Home() {
   const [waitTimes, setWaitTimes] = useState<WaitTime[]>([]);
   const [attendance, setAttendance] = useState<ParkAttendance[]>([]);
+  const [byHour, setByHour] = useState<HourlyAverage[]>([]);
+  const [byWeekday, setByWeekday] = useState<WeekdayAverage[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(function() {
@@ -60,6 +89,30 @@ export default function Home() {
       })
       .catch(function() {
         // Attendance is optional; the dashboard still works without it.
+      });
+
+    // Historical aggregates over every snapshot collected so far, bucketed in
+    // park local time by the backend.
+    fetch(`${API_BASE_URL}/api/waittimes/by-hour`)
+      .then(function(res) {
+        return res.json();
+      })
+      .then(function(data) {
+        setByHour(data);
+      })
+      .catch(function() {
+        // Optional; the live sections still render without it.
+      });
+
+    fetch(`${API_BASE_URL}/api/waittimes/by-weekday`)
+      .then(function(res) {
+        return res.json();
+      })
+      .then(function(data) {
+        setByWeekday(data);
+      })
+      .catch(function() {
+        // Optional; the live sections still render without it.
       });
   }, []);
 
@@ -218,6 +271,110 @@ export default function Home() {
               </BarChart>
             </ResponsiveContainer>
           </div>
+
+          {/* Average Wait by Hour of Day */}
+          {byHour.length > 0 && (
+            <div className="bg-white/5 border border-white/10 rounded-xl p-6">
+              <div className="text-xs text-white/40 uppercase tracking-widest mb-1">
+                Average Wait by Hour of Day
+              </div>
+              <div className="text-xs text-white/30 mb-6">
+                Every snapshot collected so far, bucketed in park local time · open rides only
+              </div>
+              <ResponsiveContainer width="100%" height={300}>
+                <LineChart data={byHour}>
+                  <CartesianGrid
+                    strokeDasharray="3 3"
+                    stroke="rgba(255,255,255,0.05)"
+                  />
+                  <XAxis
+                    dataKey="hour"
+                    tickFormatter={formatHour}
+                    tick={{ fill: "rgba(255,255,255,0.4)", fontSize: 11 }}
+                  />
+                  <YAxis
+                    tick={{ fill: "rgba(255,255,255,0.4)", fontSize: 11 }}
+                    unit="m"
+                  />
+                  <Tooltip
+                    contentStyle={{
+                      backgroundColor: "#1a1a2e",
+                      border: "1px solid rgba(255,255,255,0.1)",
+                      borderRadius: "8px",
+                      color: "white",
+                    }}
+                    labelFormatter={function(hour) {
+                      return formatHour(Number(hour));
+                    }}
+                    formatter={function(value, name, item) {
+                      return [
+                        `${value} min · ${item.payload.sampleCount} observations`,
+                        "Avg Wait",
+                      ];
+                    }}
+                  />
+                  <Line
+                    type="monotone"
+                    dataKey="avgWait"
+                    stroke="#f97316"
+                    strokeWidth={2}
+                    dot={{ fill: "#f97316", r: 3 }}
+                  />
+                </LineChart>
+              </ResponsiveContainer>
+            </div>
+          )}
+
+          {/* Average Wait by Day of Week */}
+          {byWeekday.length > 0 && (
+            <div className="bg-white/5 border border-white/10 rounded-xl p-6">
+              <div className="text-xs text-white/40 uppercase tracking-widest mb-1">
+                Average Wait by Day of Week
+              </div>
+              <div className="text-xs text-white/30 mb-6">
+                Which days actually run busier · open rides only
+              </div>
+              <ResponsiveContainer width="100%" height={300}>
+                <BarChart data={byWeekday}>
+                  <CartesianGrid
+                    strokeDasharray="3 3"
+                    stroke="rgba(255,255,255,0.05)"
+                  />
+                  <XAxis
+                    dataKey="dayName"
+                    tickFormatter={function(dayName) {
+                      return String(dayName).slice(0, 3);
+                    }}
+                    tick={{ fill: "rgba(255,255,255,0.4)", fontSize: 11 }}
+                  />
+                  <YAxis
+                    tick={{ fill: "rgba(255,255,255,0.4)", fontSize: 11 }}
+                    unit="m"
+                  />
+                  <Tooltip
+                    cursor={{ fill: "rgba(255,255,255,0.04)" }}
+                    contentStyle={{
+                      backgroundColor: "#1a1a2e",
+                      border: "1px solid rgba(255,255,255,0.1)",
+                      borderRadius: "8px",
+                      color: "white",
+                    }}
+                    formatter={function(value, name, item) {
+                      return [
+                        `${value} min · ${item.payload.sampleCount} observations`,
+                        "Avg Wait",
+                      ];
+                    }}
+                  />
+                  <Bar
+                    dataKey="avgWait"
+                    fill="#a78bfa"
+                    radius={[4, 4, 0, 0]}
+                  />
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          )}
 
           {/* Attendance by Year */}
           {attendance.length > 0 && (
