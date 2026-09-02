@@ -25,7 +25,24 @@ public interface WaitTimeRepository extends JpaRepository<WaitTime, Long> {
            "ORDER BY YEAR(w.recordedAt)")
     List<Object[]> findAverageWaitTimeByYear(String rideName);
 
-    @Query("SELECT w FROM WaitTime w WHERE w.recordedAt = (SELECT MAX(w2.recordedAt) FROM WaitTime w2)")
+    /*
+     * Hard-ticket party attractions are excluded everywhere below. Mickey's Not-So-Scary
+     * Halloween Party and Very Merry Christmas Party meet-and-greets sit in the feed all
+     * year with is_open = false, then open only during the paid evening event — where they
+     * post 60-80 minute waits and dominate the live view. Because they open only in the
+     * evening they also inflate exactly the hours the daily peak sits in (22:00 reads 12.8
+     * min with them, 10.8 without). They are not part of a normal park day.
+     *
+     * Matched by event name, which is safe here: unlike the ride names these are plain
+     * ASCII. "Mad Tea Party" is untouched — it contains neither event phrase.
+     */
+
+    @Query("""
+            SELECT w FROM WaitTime w
+            WHERE w.recordedAt = (SELECT MAX(w2.recordedAt) FROM WaitTime w2)
+              AND w.rideName NOT LIKE '%Not-So-Scary%'
+              AND w.rideName NOT LIKE '%Very Merry%'
+            """)
     List<WaitTime> findLatestSnapshot();
 
     /*
@@ -64,6 +81,8 @@ public interface WaitTimeRepository extends JpaRepository<WaitTime, Long> {
             FROM wait_times
             WHERE is_open = true
               AND (CAST(:rideName AS text) IS NULL OR ride_name = CAST(:rideName AS text))
+              AND ride_name NOT LIKE '%Not-So-Scary%'
+              AND ride_name NOT LIKE '%Very Merry%'
               AND ride_name IN (
                   SELECT ride_name FROM wait_times WHERE is_open = true
                   GROUP BY ride_name HAVING MAX(wait_minutes) > 0
@@ -81,6 +100,8 @@ public interface WaitTimeRepository extends JpaRepository<WaitTime, Long> {
                    COUNT(*)
             FROM wait_times
             WHERE is_open = true
+              AND ride_name NOT LIKE '%Not-So-Scary%'
+              AND ride_name NOT LIKE '%Very Merry%'
               AND ride_name IN (
                   SELECT ride_name FROM wait_times WHERE is_open = true
                   GROUP BY ride_name HAVING MAX(wait_minutes) > 0
@@ -100,6 +121,8 @@ public interface WaitTimeRepository extends JpaRepository<WaitTime, Long> {
             SELECT ride_name
             FROM wait_times
             WHERE is_open = true
+              AND ride_name NOT LIKE '%Not-So-Scary%'
+              AND ride_name NOT LIKE '%Very Merry%'
             GROUP BY ride_name
             HAVING MAX(wait_minutes) > 0 AND COUNT(*) >= 50
             ORDER BY AVG(wait_minutes) DESC

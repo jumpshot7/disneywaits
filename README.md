@@ -28,6 +28,7 @@ Two further filters keep the aggregates honest:
 
 - **Only attractions that actually queue.** The source feed lists Cinderella Castle, a splash pad, the Main Street vehicles and a walking scavenger hunt alongside real rides; all four report a wait of 0 forever. Averaging TRON together with a building produces a number describing no guest's experience, so anything that has never once posted a wait is excluded. That set is derived from the data rather than hard-coded — the feed mixes straight and curly apostrophes, so a literal name list would silently fail to match.
 - **A minimum sample floor per bucket.** Some overnight hours rested on a single reading, which plotted as a hard zero and dominated the chart's shape. A bucket needs at least three observations to be reportable.
+- **No hard-ticket party attractions.** The Not-So-Scary Halloween and Very Merry Christmas meet-and-greets sit in the feed year-round with `is_open = false`, then open only during the paid evening event, where they post 60–80 minute waits. They topped the live view and, because they open only late, inflated exactly the hours the daily peak sits in (22:00 read 12.8 min with them, 10.8 without). They are not part of a normal park day, so they are excluded throughout.
 
 Because averaging different rides together is only so meaningful, the hour-of-day chart also offers a per-ride view: "Seven Dwarfs Mine Train at 11 AM" is a real answer in a way that "the park at 11 AM" is not.
 
