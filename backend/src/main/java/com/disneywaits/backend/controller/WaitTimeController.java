@@ -1,5 +1,7 @@
 package com.disneywaits.backend.controller;
 
+import com.disneywaits.backend.dto.HourlyAverage;
+import com.disneywaits.backend.dto.WeekdayAverage;
 import com.disneywaits.backend.model.WaitTime;
 import com.disneywaits.backend.service.WaitTimeService;
 import lombok.RequiredArgsConstructor;
@@ -44,6 +46,20 @@ public class WaitTimeController {
     @GetMapping("/latest")
     public ResponseEntity<List<WaitTime>> getLastestSnapshot() {
         return ResponseEntity.ok(waitTimeService.getLatestSnapshot());
+    }
+
+    // GET /api/waittimes/by-hour
+    // GET /api/waittimes/by-hour?ride=Space Mountain
+    @GetMapping("/by-hour")
+    public ResponseEntity<List<HourlyAverage>> getAverageByHour(
+            @RequestParam(required = false) String ride) {
+        return ResponseEntity.ok(waitTimeService.getAverageWaitByHourOfDay(ride));
+    }
+
+    // GET /api/waittimes/by-weekday
+    @GetMapping("/by-weekday")
+    public ResponseEntity<List<WeekdayAverage>> getAverageByWeekday() {
+        return ResponseEntity.ok(waitTimeService.getAverageWaitByDayOfWeek());
     }
 
 }

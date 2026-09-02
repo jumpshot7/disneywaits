@@ -4,19 +4,35 @@ DisneyWaits is a full-stack data project built around one question: **"Are Magic
 
 It ingests live wait-time snapshots from the [Queue-Times.com](https://queue-times.com) public API, stores them in PostgreSQL, and surfaces them through a Spring Boot REST API and a Next.js dashboard.
 
+## Live
+
+| | |
+|---|---|
+| **Dashboard** | https://disneywaitsweb.z14.web.core.windows.net/ |
+| **API** | https://disneywaits-api-fbcjhyg2dnfnb7ct.northcentralus-01.azurewebsites.net/api/waittimes/latest |
+
+The whole stack runs on Azure — PostgreSQL Flexible Server, App Service for the API, Storage static website for the frontend — deployed by GitHub Actions on every push to `main`. Ingestion runs on a schedule, so the dataset grows without manual intervention.
+
 ## A note on the data (and why the project is built this way)
 
-The official Queue-Times.com API only exposes **live** wait times — a snapshot of the current moment, with no historical endpoint. Rather than fabricate a historical dataset, DisneyWaits treats history as something to **accumulate**: the pipeline captures live snapshots over time, building a growing dataset that powers year-over-year analysis as it matures. The backend's trend query is in place today and becomes more meaningful the longer the pipeline runs.
+The official Queue-Times.com API only exposes **live** wait times — a snapshot of the current moment, with no historical endpoint. Rather than fabricate a historical dataset, DisneyWaits treats history as something to **accumulate**: the pipeline captures live snapshots over time, building a growing dataset that powers trend analysis as it matures.
+
+Two consequences worth knowing about:
+
+- **Timestamps are stored in UTC; aggregates are reported in park local time.** The pipeline runs on CI runners set to UTC, but "average wait at 4 PM" is only meaningful in Eastern. The aggregation queries convert with `AT TIME ZONE 'UTC' AT TIME ZONE 'America/New_York'`, which lets Postgres apply the right DST offset per row rather than hard-coding a shift that would be wrong half the year.
+- **Sampling is uneven, so every aggregate ships its sample count.** Scheduled runs are best-effort and some hours are far thinner than others. The API returns `sampleCount` alongside each average and the dashboard surfaces it, so a figure resting on three observations is visibly weak instead of quietly misleading.
+
+Closed rides report a wait of 0, so aggregates filter to open rides only — otherwise every overnight hour would average toward zero and flatten the real curve.
 
 ## Architecture & Tech Stack
 
 - **Data Pipeline (`pipeline/`)** — Python (`httpx`, `psycopg2`).
-    - Fetches the current wait time for every Magic Kingdom ride and inserts a timestamped snapshot into PostgreSQL.
-    - Designed to be run repeatedly (e.g. via cron or a scheduler) to build history over time.
+    - Fetches the current wait time for every Magic Kingdom ride and inserts a UTC-timestamped snapshot into PostgreSQL.
+    - Runs on a schedule via GitHub Actions (`.github/workflows/ingest.yml`) to build history over time.
 - **Backend API (`backend/`)** — Spring Boot 3.5 (Java 21, Spring Data JPA).
-    - REST endpoints for all wait times, per-park and per-ride lookups, and a JPQL year-over-year average query.
+    - REST endpoints for live and historical wait times, per-park and per-ride lookups, and time-bucketed aggregates computed in park local time.
 - **Frontend (`frontend/`)** — Next.js + TypeScript dashboard with Recharts.
-    - Live stat cards, a top-10 longest-waits bar chart, and a full ride list.
+    - Live stat cards and a top-10 longest-waits chart, then the historical view: average wait by hour of day, by day of week, and annual attendance.
 
 ## Repository Structure
 
@@ -63,20 +79,27 @@ The frontend reads the backend URL from `NEXT_PUBLIC_API_BASE_URL` (see `fronten
 
 ## API Endpoints
 
-| Method | Path                          | Description                            |
-|--------|-------------------------------|----------------------------------------|
-| GET    | `/api/waittimes`              | All recorded wait-time snapshots       |
-| GET    | `/api/waittimes/park?name=`   | Snapshots for a given park             |
-| GET    | `/api/waittimes/ride?name=`   | Snapshots for a given ride             |
-| GET    | `/api/waittimes/trends?ride=` | Year-over-year average wait for a ride |
+| Method | Path                             | Description                                                        |
+|--------|----------------------------------|--------------------------------------------------------------------|
+| GET    | `/api/waittimes`                 | All recorded wait-time snapshots                                    |
+| GET    | `/api/waittimes/latest`          | Only the most recent snapshot — what the dashboard's live view uses |
+| GET    | `/api/waittimes/park?name=`      | Snapshots for a given park                                          |
+| GET    | `/api/waittimes/ride?name=`      | Snapshots for a given ride                                          |
+| GET    | `/api/waittimes/by-hour`         | Average wait per hour of the park day; optional `?ride=` filter     |
+| GET    | `/api/waittimes/by-weekday`      | Average wait per day of week                                        |
+| GET    | `/api/waittimes/trends?ride=`    | Average wait grouped by year — needs multiple years to say anything |
+| GET    | `/api/attendance`                | Annual park attendance, all parks                                   |
+| GET    | `/api/attendance/park?parkId=`   | Annual attendance for one park (Magic Kingdom is `6`)               |
+
+`by-hour` and `by-weekday` are the queries that answer the project's actual question; each row carries an `avgWait` and the `sampleCount` behind it.
 
 ## Roadmap
 
-- **Scheduled ingestion** — run the pipeline automatically instead of manually.
-- **Park attendance** — ingest yearly attendance as a long-term crowd proxy (model scaffolded in `backend/`).
+- **Backend tests** covering the aggregation queries and controller endpoints.
 - **Ride uptime & daily crowd rank** — additional Queue-Times datasets (models scaffolded in `backend/`).
+- **Pagination on `/api/waittimes`** — it currently returns the full table, which the dashboard downloads in one request.
 - **Containerize the backend & frontend** so `docker compose up` runs the entire stack.
-- **Backend tests** covering the repository queries and controller endpoints.
+- **Store `recorded_at` as `TIMESTAMPTZ`** so the UTC convention is enforced by the schema rather than by the pipeline.
 
 ## Data source
 
