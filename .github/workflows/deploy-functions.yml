@@ -28,11 +28,15 @@ jobs:
           pip install -r functions/requirements.txt
           python -c "import sys; sys.path.insert(0, 'functions'); import function_app; print('function_app imports OK')"
 
+      # Flex Consumption has no zipDeploy endpoint — that is the legacy Kudu path,
+      # and asking for it returns 404. The scm-do-build-during-deployment and
+      # enable-oryx-build flags are what force that path, so they are deliberately
+      # absent. remote-build tells the platform to install requirements.txt itself
+      # via the newer one-deploy API.
       - name: Deploy to Azure Functions
         uses: Azure/functions-action@v1
         with:
           app-name: ${{ secrets.AZURE_FUNCTIONAPP_NAME }}
           package: functions
           publish-profile: ${{ secrets.AZURE_FUNCTIONAPP_PUBLISH_PROFILE }}
-          scm-do-build-during-deployment: true
-          enable-oryx-build: true
+          remote-build: true
