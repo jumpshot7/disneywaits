@@ -1,0 +1,38 @@
+name: Deploy ingestion function to Azure Functions
+
+on:
+  push:
+    branches: [ main ]
+    paths:
+      - 'functions/**'
+      - '.github/workflows/deploy-functions.yml'
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      # Sanity check before shipping: the deploy itself cannot tell whether the
+      # module actually imports, and a broken import would only surface as a
+      # silently failing timer.
+      - name: Verify the function module imports
+        run: |
+          pip install -r functions/requirements.txt
+          python -c "import sys; sys.path.insert(0, 'functions'); import function_app; print('function_app imports OK')"
+
+      - name: Deploy to Azure Functions
+        uses: Azure/functions-action@v1
+        with:
+          app-name: ${{ secrets.AZURE_FUNCTIONAPP_NAME }}
+          package: functions
+          publish-profile: ${{ secrets.AZURE_FUNCTIONAPP_PUBLISH_PROFILE }}
+          scm-do-build-during-deployment: true
+          enable-oryx-build: true

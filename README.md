@@ -34,13 +34,31 @@ Because averaging different rides together is only so meaningful, the hour-of-da
 
 ## Architecture & Tech Stack
 
-- **Data Pipeline (`pipeline/`)** — Python (`httpx`, `psycopg2`).
+- **Ingestion (`functions/`)** — Python on Azure Functions, timer-triggered every 30 minutes.
     - Fetches the current wait time for every Magic Kingdom ride and inserts a UTC-timestamped snapshot into PostgreSQL.
-    - Runs on a schedule via GitHub Actions (`.github/workflows/ingest.yml`) to build history over time.
+    - Runnable by hand for a one-off snapshot: `python functions/ingest_core.py`.
+    - Moved off GitHub Actions cron deliberately — see below.
 - **Backend API (`backend/`)** — Spring Boot 3.5 (Java 21, Spring Data JPA).
     - REST endpoints for live and historical wait times, per-park and per-ride lookups, and time-bucketed aggregates computed in park local time.
 - **Frontend (`frontend/`)** — Next.js + TypeScript dashboard with Recharts.
     - Live stat cards and a top-10 longest-waits chart, then the historical view: average wait by hour of day, by day of week, and annual attendance.
+
+## Why ingestion runs on Azure Functions, not GitHub Actions
+
+Scheduled GitHub Actions workflows are explicitly best-effort — runs are delayed or dropped under load, and GitHub deprioritizes repositories that schedule frequently. This project asked for a run every 30 minutes (48/day) and was getting **about 6**, with runs firing at minutes unrelated to the requested schedule. Re-pointing the cron at less contended minutes changed nothing, which confirmed the delivery problem was deprioritization rather than slot contention.
+
+Since the whole project depends on evenly sampled history, ingestion moved to an Azure Functions timer trigger, which runs on the Function App's own scheduler. At ~1,440 executions per month it sits far inside the Consumption plan's free grant.
+
+### Deploying the function
+
+The GitHub Actions workflow (`.github/workflows/deploy-functions.yml`) deploys on every push to `main` that touches `functions/`. It needs two repository secrets:
+
+| Secret | Value |
+|---|---|
+| `AZURE_FUNCTIONAPP_NAME` | the Function App's name |
+| `AZURE_FUNCTIONAPP_PUBLISH_PROFILE` | the full XML from **Get publish profile** in the portal |
+
+The Function App itself needs the database settings as Application Settings — `DB_HOST`, `DB_PORT`, `DB_NAME`, `DB_USER`, `DB_PASSWORD`, and `DB_SSLMODE=require` — and the Postgres server must allow connections from Azure services.
 
 ## Repository Structure
 
