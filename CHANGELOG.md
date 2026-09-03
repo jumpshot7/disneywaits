@@ -59,9 +59,16 @@ cron expression fixes deprioritization.
 | Region | North Central US |
 | Schedule | `0 */30 * * * *` (NCRONTAB, every 30 min) |
 
-Confirmed working: a snapshot landed at **`02:00:00.747919 UTC`** — sub-second past the
-scheduled slot, with no GitHub run within five minutes. The GitHub cron never once landed on
-its requested minute in three weeks.
+Confirmed working — three consecutive fires, each within a second of its slot and none matching
+any GitHub run:
+
+```
+2026-09-03 02:00:00.747919
+2026-09-03 02:30:00.688097
+2026-09-03 03:00:00.991306
+```
+
+For comparison, the GitHub cron never once landed on its requested minute in three weeks.
 
 **New files:** `functions/ingest_core.py` (the ingestion logic, now the single
 implementation), `functions/function_app.py` (the timer trigger),
@@ -261,17 +268,17 @@ queueable-rides filter are exactly the logic a test should pin.
 
 | Commit | Description |
 |---|---|
-| `cf80358` | ci: offset scheduled crons off congested round minutes |
-| `7ed65e1` | feat: surface accumulated history as hour-of-day and weekday aggregates |
-| `797dc01` | fix: make hour-of-day aggregates meaningful |
-| `4ca079a` | chore: stop tracking .claude local settings |
-| `b119a1e` | fix: repair aggregate SQL broken by text-block concatenation |
-| `238f3f3` | style: rework dashboard visuals and fix chart hover |
-| `a55a7ed` | fix: exclude hard-ticket party attractions |
-| `92d53f0` | feat: add Azure Functions timer trigger for ingestion |
-| `9596d2c` | fix: use one-deploy path for Flex Consumption |
-| `02e8746` | fix: deploy the function via Azure sign-in instead of a publish profile |
-| `e7b19c7` | chore: retire the GitHub Actions ingestion cron |
+| `870fc1c` | ci: offset scheduled crons off congested round minutes |
+| `f5e2ffb` | feat: surface accumulated history as hour-of-day and weekday aggregates |
+| `342d371` | fix: make hour-of-day aggregates meaningful |
+| `88ef915` | chore: stop tracking .claude local settings |
+| `9f44525` | fix: repair aggregate SQL broken by text-block concatenation |
+| `e490b0e` | style: rework dashboard visuals and fix chart hover |
+| `ab2e744` | fix: exclude hard-ticket party attractions |
+| `0afdfe6` | feat: add Azure Functions timer trigger for ingestion |
+| `865b9fb` | fix: use one-deploy path for Flex Consumption |
+| `991950c` | fix: deploy the function via Azure sign-in instead of a publish profile |
+| `99ebd35` | chore: retire the GitHub Actions ingestion cron |
 
 18 files changed, 1,037 insertions, 351 deletions.
 
