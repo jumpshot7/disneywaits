@@ -78,12 +78,11 @@ The Function App itself needs the database settings as Application Settings — 
 docker compose up -d
 ```
 
-**2. Run the ingestion pipeline** to capture a wait-time snapshot:
+**2. Capture a wait-time snapshot.** In production this runs on a timer in Azure Functions; the same code takes a one-off snapshot locally:
 
 ```bash
-cd pipeline
-pip install -r requirements.txt
-python main.py
+pip install -r functions/requirements.txt
+python functions/ingest_core.py
 ```
 
 **3. Start the backend API** (serves on `http://localhost:8080`):
